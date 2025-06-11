@@ -8,7 +8,7 @@ from django.utils.html import escape
 
 from neapolitan.views import CRUDView, Role, classonlymethod
 
-from .models import Bookmark, NamedCollection
+from .models import Bookmark, NamedCollection, BookmarkTag
 
 
 class BookmarkView(CRUDView):
@@ -39,10 +39,16 @@ class BookmarkListOnlyView(CRUDView):
         return super().get_urls(roles={Role.LIST})
 
 
+class BookmarkTagView(CRUDView):
+    model = BookmarkTag
+    fields = ["bookmark", "tag"]
+
+
 urlpatterns = [
     *BookmarkView.get_urls(),
     *NamedCollectionView.get_urls(),
     *BookmarkListOnlyView.get_urls(),
+    *BookmarkTagView.get_urls(),
 ]
 
 
@@ -187,12 +193,11 @@ class BasicTests(TestCase):
                 return HttpResponse(self.template_name_suffix)
 
         view = InitKwargsCRUDView.as_view(
-            role=Role.DETAIL,
-            template_name_suffix='_test_suffix'
+            role=Role.DETAIL, template_name_suffix="_test_suffix"
         )
-        request = RequestFactory().get('/')
+        request = RequestFactory().get("/")
         response = view(request)
-        self.assertContains(response, '_test_suffix')
+        self.assertContains(response, "_test_suffix")
 
 
 class RoleTests(TestCase):
@@ -269,11 +274,11 @@ class RoleTests(TestCase):
             note="Carlton Gibson's homepage. Blog, Contact and Project links.",
             favourite=True,
         )
-        response = self.client.get('/bookmarklist/')
+        response = self.client.get("/bookmarklist/")
         self.assertEqual(response.status_code, 200)
 
-        for lookup in ['View', 'Edit', 'Delete']:
-            self.assertNotContains(response, f'>{lookup}</a>')
+        for lookup in ["View", "Edit", "Delete"]:
+            self.assertNotContains(response, f">{lookup}</a>")
 
     def test_url_ordering_for_slug_path_converters(self):
         # Ensures correct ordering of URL patterns when using str-based path converters
@@ -291,11 +296,11 @@ class RoleTests(TestCase):
 
         # Expected order of URL paths
         expected_paths = [
-            'bookmark/',              # LIST
-            'bookmark/new/',          # CREATE should come before any slug-based URLs
-            'bookmark/<slug:title>/',  # DETAIL
-            'bookmark/<slug:title>/edit/',    # UPDATE
-            'bookmark/<slug:title>/delete/',  # DELETE
+            "bookmark/",  # LIST
+            "bookmark/new/",  # CREATE should come before any slug-based URLs
+            "bookmark/<slug:title>/",  # DETAIL
+            "bookmark/<slug:title>/edit/",  # UPDATE
+            "bookmark/<slug:title>/delete/",  # DELETE
         ]
 
         # Assert that the generated URL paths match the expected order
@@ -331,3 +336,28 @@ class MktemplateCommandTest(TestCase):
 
         # Remove the created file
         os.remove(file_path)
+
+
+class ForeignKeyDisplayTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.bookmark = Bookmark.objects.create(
+            url="https://example.com/",
+            title="Example Site",
+            note="An example bookmark",
+        )
+        cls.tag1 = BookmarkTag.objects.create(bookmark=cls.bookmark, tag="python")
+        cls.tag2 = BookmarkTag.objects.create(bookmark=cls.bookmark, tag="web")
+
+    def test_foreign_key_display_in_list_view(self):
+        response = self.client.get("/bookmarktag/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.bookmark.title)
+        self.assertContains(response, "python")
+        self.assertContains(response, "web")
+
+    def test_foreign_key_display_in_detail_view(self):
+        response = self.client.get(f"/bookmarktag/{self.tag1.pk}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.bookmark.title)
+        self.assertContains(response, "python")
